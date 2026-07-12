@@ -24,27 +24,36 @@ class QA_Request(BaseModel):
     question: str
 
 # 4. Connect to Gemini (Reads your API key from environment variables)
-# We use gemini-2.5-flash as it is highly efficient at reading text from images
 client = genai.Client()
 
 @app.post("/answer-image")
 async def answer_image(payload: QA_Request):
     try:
-        # Step A: Clean and decode the base64 image data
-        b64_data = payload.image_base64
-        if "," in b64_data:
-            b64_data = b64_data.split(",")[1]
-            
-        image_bytes = base64.b64decode(b64_data)
+        # Step A: Clean up accidental leading/trailing spaces or newlines
+        raw_string = payload.image_base64.strip()
         
-        # Step B: Strict instruction forcing Gemini to obey rule #1
+        # Step B: Safely extract the part after the comma if a data URL prefix exists
+        if "," in raw_string:
+            clean_b64 = raw_string.split(",", 1)[1]
+        else:
+            clean_b64 = raw_string
+            
+        # Step C: FIX THE PADDING: Ensure the string length is a multiple of 4
+        missing_padding = len(clean_b64) % 4
+        if missing_padding:
+            clean_b64 += '=' * (4 - missing_padding)
+            
+        # Step D: Decode the cleaned string safely into bytes
+        image_bytes = base64.b64decode(clean_b64)
+        
+        # Step E: Strict instruction forcing Gemini to obey rule #1
         system_instruction = (
             "You are an expert data extraction bot. Answer the user's question using ONLY the provided image. "
             "CRITICAL: If the answer is a numeric value, output ONLY the number (e.g., '4089.35'). "
             "Do NOT include currency symbols ($ or ₹), units, spaces, or words. Just the raw value."
         )
         
-        # Step C: Send the raw image bytes and question directly to Gemini
+        # Step F: Send the raw image bytes and question directly to Gemini
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[
@@ -60,10 +69,10 @@ async def answer_image(payload: QA_Request):
             )
         )
         
-        # Step D: Return the response exactly as required by the spec
+        # Step G: Return the response exactly as required by the spec
         final_answer = response.text.strip()
         return {"answer": final_answer}
         
     except Exception as e:
+        # If anything fails, this returns the exact error message to debug easily
         raise HTTPException(status_code=500, detail=str(e))
-
