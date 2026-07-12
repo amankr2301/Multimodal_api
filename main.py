@@ -54,8 +54,9 @@ async def answer_image(payload: QA_Request):
         )
         
         # Step F: Send the raw image bytes and question directly to Gemini
+        # Using gemini-1.5-flash to avoid the deprecation error
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=[
                 types.Part.from_bytes(
                     data=image_bytes,
